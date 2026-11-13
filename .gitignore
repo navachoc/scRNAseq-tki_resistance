@@ -1,0 +1,21 @@
+# Data and results: never versioned (only the format description is tracked)
+*/data/*
+!*/data/README.md
+*/results/
+
+# Large objects anywhere
+*.rds
+*.h5
+*.h5seurat
+*.h5ad
+
+# Internal notes and tooling
+CLAUDE.md
+.claude/
+
+# R / editor
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+.vscode/
