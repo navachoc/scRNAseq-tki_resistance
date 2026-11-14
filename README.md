@@ -9,7 +9,7 @@
 ![Framework](https://img.shields.io/badge/framework-Seurat%20v5-orange)
 ![Integration](https://img.shields.io/badge/integration-Harmony-purple)
 
-[Objective](#objective) · [Pipeline](#pipeline) · [Running it](#running-it) · [Data format](#data-format) · [Repository structure](#repository-structure) · [References](#references)
+[Objective](#objective) · [Pipeline](#pipeline) · [Quick start](#quick-start) · [Example output](#example-output) · [Adding a model](#adding-a-model) · [Repository structure](#repository-structure) · [References](#references)
 
 </div>
 
@@ -19,9 +19,9 @@
 
 When a lung cancer cell line becomes resistant to a tyrosine kinase inhibitor, is the resistant state a new transcriptional program, or was it already present as a rare subpopulation of the parental cells?
 
-This pipeline compares a parental and a resistant sample profiled with 10x Genomics, one pair per driver receptor (MET and EGFR). It integrates the two samples, clusters the cells, scores every cell for a resistance signature derived from bulk RNA-seq, and orders cells along a trajectory. Parental cells that already score high for the signature, and where they fall along the trajectory, are the readout for pre-existence.
+The pipeline compares a parental and a resistant sample profiled with 10x Genomics. It integrates the two samples, clusters the cells, scores every cell for a resistance signature derived from bulk RNA-seq, and orders the cells along a trajectory. Parental cells that already score high for the signature, and where they sit among the states and along the trajectory, are the readout for pre-existence.
 
-The sample names are generic: `MET1` / `MET1R` and `EGFR1` / `EGFR1_R` (parental / resistant). Nothing in this repository is real data or a real result.
+Two groups are configured, one per driver receptor: **MET** (samples `MET1` / `MET1R`) and **EGFR** (`EGFR1` / `EGFR1_R`). The repository ships **no real data**: a simulator produces fictitious 10x-style data so that every step, and every figure below, can be reproduced by anyone.
 
 ---
 
@@ -29,76 +29,101 @@ The sample names are generic: `MET1` / `MET1R` and `EGFR1` / `EGFR1_R` (parental
 
 ```mermaid
 flowchart LR
-    A[Cell Ranger] --> B[01 QC]
+    A[Cell Ranger or simulate_data] --> B[01 QC]
     B --> C[02 SCTransform + Harmony]
     C --> D[03 Clustering]
     D --> E[04 Markers + GO/KEGG]
     D --> F[05 Signature score]
     F --> G[06 Monocle3]
+    G --> H[make_figures]
 ```
 
 | Step | Script | What it does | Checkpoint |
 |------|--------|--------------|------------|
+| — | `simulate_data.R` | Fictitious 10x-style data and signature for a group | `<GROUP>/data/` |
 | 01 | `sc_01_qc.R` | QC and filtering per sample | `<sample>_filtered.rds` |
 | 02 | `sc_02_normalize_integrate.R` | SCTransform per sample, Harmony on sample, PCA, UMAP | `<GROUP>_integrated.rds` |
 | 03 | `sc_03_clustering.R` | Louvain clustering at several resolutions, marker-gene panels | `<GROUP>_clustered.rds` |
 | 04 | `sc_04_markers_all.R` | Markers per cluster, GO/KEGG enrichment, pre-existence table | `<GROUP>_de_results.rds` |
-| 05 | `sc_05_signature.R` | UCell and module scores for the bulk-derived signature | `<GROUP>_signature.rds` |
+| 05 | `sc_05_signature.R` | UCell and module scores of the bulk-derived signature | `<GROUP>_signature.rds` |
 | 06 | `sc_06_monocle3.R` | Trajectory, pseudotime and graph test | `<GROUP>_trajectory.rds` |
 | 06b | `sc_06b_monocle3_no_graphtest.R` | Same as 06 without the slow graph test | same |
+| — | `make_figures.R` | Four clean summary figures | `results/<GROUP>/` |
 
 Design choices worth knowing:
 
 - Harmony corrects by **sample** (technical run effect), never by condition, so the parental/resistant difference is preserved.
-- Each sample is normalised separately with SCTransform before merging.
-- Cell-cycle scores are computed and, by default, regressed out (`REGRESS_CELL_CYCLE`).
+- Each sample is normalised separately with SCTransform before merging, and cell-cycle scores are regressed out by default (`REGRESS_CELL_CYCLE`).
 - Every step from 03 on has a `RERUN_VIZ_ONLY` switch that loads the saved checkpoint and regenerates only figures and reports.
-- A high signature score in a parental cell is only a statement about the score distribution (the threshold is a percentile, `HIGH_SCORE_PCTL`). Pre-existence has to be argued from where those cells sit in the clusters and the trajectory, not from the fraction above the threshold.
+- A high signature score in a parental cell only describes the score distribution (the cut-off is a percentile, `HIGH_SCORE_PCTL`). Pre-existence has to be argued from where those cells sit among the states and along the trajectory, not from the fraction above the cut-off.
 
 ---
 
-## Running it
+## Quick start
 
-R 4.3 or later. **Open R inside the repository**: each script calls `setwd(here::here())` and the root is fixed by the `.here` file.
+R 4.3 or later. **Open R inside the repository**: every script calls `setwd(here::here())` and the root is fixed by the `.here` file.
 
 ```r
 # Main packages: Seurat 5, SeuratWrappers, harmony, UCell, monocle3, presto, glmGamPoi,
 # clusterProfiler, org.Hs.eg.db, clustree, ggridges, pheatmap, ggrepel, patchwork,
-# ggplot2, dplyr, tibble, tidyr, RColorBrewer, here
-# 1. In each script, edit the CONFIGURATION block: GROUP ("MET" or "EGFR") and RERUN_VIZ_ONLY
-# 2. Run in order
+# ggplot2, dplyr, tibble, tidyr, RColorBrewer, here, R.utils
+
+GROUP <- "MET"                                  # or "EGFR"
+source("scripts/simulate_data.R")               # fictitious data (skip it if you have real data)
+# In each script below, set GROUP in its CONFIGURATION block and run in order
 source("scripts/sc_01_qc.R")
 source("scripts/sc_02_normalize_integrate.R")
 source("scripts/sc_03_clustering.R")
 source("scripts/sc_04_markers_all.R")
 source("scripts/sc_05_signature.R")
 source("scripts/sc_06_monocle3.R")
+source("scripts/make_figures.R")                # uses GROUP; figures go to results/<GROUP>/
 ```
 
-Parameters that vary by dataset (QC thresholds, number of PCs, gene panels, cluster annotations, colours) live in `config/pipeline_config.R`, `config/gene_lists.R` and `config/colors.R`. To add a dataset, add one entry to each list in `pipeline_config.R`.
+Every script keeps its `GROUP` and `RERUN_VIZ_ONLY` in a CONFIGURATION block at the top. `RERUN_VIZ_ONLY <- TRUE` loads the saved checkpoint and redraws only the figures. With real data, place the Cell Ranger output in `<GROUP>/data/<sample>/filtered_feature_bc_matrix/` and a signature CSV (columns `Gene` and `Classification`, `Upregulated` / `Downregulated`) in `<GROUP>/data/signatures/<GROUP>_resistance_signature_conservative.csv`.
 
-**Requirements and status.** Both groups were run end to end (`sc_01` to `sc_06`; `sc_06b` on MET) on simulated 10x-style data: two samples of 1,500 cells per group, 3,000 genes, a planted resistance program present in a few percent of the parental cells. No real data is shipped. Notes from those runs:
-
-- With so few genes some cell-cycle markers are absent and Seurat warns; with real data this does not happen.
-- The optional `.h5ad` export at the end of `sc_02` needs `SeuratDisk` and fails with a warning on recent SeuratObject versions. It is wrapped in `tryCatch`, so the pipeline continues; nothing downstream reads it.
-- GO/KEGG enrichment (`sc_04`) needs internet access for KEGG and returned no significant terms on the simulated genes; the enrichment figures then show an empty panel, by design.
-- The HTML reports of the original analysis are not part of this repository: every step writes a Markdown report.
-
-`CLUSTER_LABELS` is empty by default. After `sc_04`, fill it in with the transcriptional state of each cluster and re-run `sc_04` and `sc_05` with `RERUN_VIZ_ONLY <- TRUE` to get the annotated figures.
+`make_figures.R` can also read the checkpoints of another project folder (`RESULTS_ROOT`), name the states from the config (`USE_STATE_NAMES <- TRUE`) or write somewhere else (`OUT_DIR`); see its header.
 
 ---
 
-## Data format
+## Example output
 
-Nothing is versioned except the format description. 
+All figures below come from the pipeline run on the **fictitious data** of `simulate_data.R` (about 5,000 cells per sample, 4,000 genes, a planted resistance program present in a small parental subpopulation). They show what each step produces, not biology. States are named generically.
 
-```
-MET/data/MET1/filtered_feature_bc_matrix/       Cell Ranger output, parental
-MET/data/MET1R/filtered_feature_bc_matrix/      Cell Ranger output, resistant
-MET/data/signatures/MET_resistance_signature_conservative.csv
-```
+**UMAPs by sample and state, and composition of each state**
 
-The signature is a CSV with the columns `Gene` and `Classification` (`Upregulated` / `Downregulated`), typically the output of a bulk RNA-seq comparison of the resistant and parental populations.
+| MET | EGFR |
+|:---:|:---:|
+| <img src="results/MET/figure_umaps_composition.png" width="460"> | <img src="results/EGFR/figure_umaps_composition.png" width="460"> |
+
+**Parental cells with a high signature score, on the UMAP**
+
+| MET | EGFR |
+|:---:|:---:|
+| <img src="results/MET/figure_umap_high_score.png" width="460"> | <img src="results/EGFR/figure_umap_high_score.png" width="460"> |
+
+**Percentage of high-score cells per state and sample**
+
+| MET | EGFR |
+|:---:|:---:|
+| <img src="results/MET/figure_preexistence_barplot.png" width="460"> | <img src="results/EGFR/figure_preexistence_barplot.png" width="460"> |
+
+**Pseudotime per group (Wilcoxon tests, square-root axis)**
+
+| MET | EGFR |
+|:---:|:---:|
+| <img src="results/MET/figure_pseudotime_groups.png" width="460"> | <img src="results/EGFR/figure_pseudotime_groups.png" width="460"> |
+
+---
+
+## Adding a model
+
+The code is driven by `config/pipeline_config.R`. To add another receptor or model:
+
+1. Add its samples to `SAMPLES`, its conditions to `CONDITIONS` and its colours to `SAMPLE_COLORS`.
+2. Add its QC thresholds to `QC_PARAMS` and its gene panels (`GENES_RESISTANCE_PANEL`, `GENES_KEY_SIGNATURE`, `GENES_DTP`).
+3. Optionally name the transcriptional states in `CLUSTER_LABELS` once `sc_04` has shown what each cluster is.
+4. Set `GROUP` to the new name in the CONFIGURATION block of each script.
 
 ---
 
@@ -106,12 +131,10 @@ The signature is a CSV with the columns `Gene` and `Classification` (`Upregulate
 
 ```
 config/        pipeline_config.R · gene_lists.R · colors.R
-scripts/       sc_01 … sc_06b
-MET/data/      input (not versioned)       MET/results/    output (not versioned)
-EGFR/data/     input (not versioned)       EGFR/results/   output (not versioned)
+scripts/       simulate_data.R · sc_01 … sc_06b · make_figures.R
+results/       figures of the example run (versioned)
+<GROUP>/data/  input (not versioned)       <GROUP>/results/  pipeline output (not versioned)
 ```
-
-Each script writes figures (PNG), tables (CSV), a Markdown report and its checkpoint under `<GROUP>/results/`.
 
 ---
 
