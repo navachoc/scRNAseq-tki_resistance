@@ -57,19 +57,6 @@ Design choices worth knowing:
 
 ---
 
-## Example output
-
-All figures below come from the pipeline run on **simulated data** (two samples of 1,500 cells, 3,000 genes, a planted resistance program present in a few percent of the parental cells). They show what each step produces, not biology. The state names are placeholders.
-
-
-| | |
-|---|---|
-| <img src="docs/figures/01_transcriptional_states.png" width="440"><br>**Transcriptional states** (`sc_04`): UMAP on the Harmony space, one colour per annotated state. | <img src="docs/figures/02_sample_and_clusters.png" width="440"><br>**Clusters and sample of origin** (`sc_03`): the two samples overlap inside shared clusters while sample-specific clusters stay separate. |
-| <img src="docs/figures/03_signature_high_score.png" width="440"><br>**Pre-existence view** (`sc_05`): parental cells with a high resistance score (dark) next to parental low-score and resistant cells. | <img src="docs/figures/04_composition.png" width="440"><br>**Composition** (`sc_03`): share of each sample in every cluster, with absolute cell counts. |
-| <img src="docs/figures/05_signature_landscape.png" width="440"><br>**Signature landscape** (`sc_05`): UCell score of the up-regulated genes against the down-regulated genes, per cell. | <img src="docs/figures/06_trajectory_graph.png" width="440"><br>**Trajectory** (`sc_06`): Monocle3 graph over the Harmony UMAP, rooted in the parental cells. |
-
----
-
 ## Running it
 
 R 4.3 or later. **Open R inside the repository**: each script calls `setwd(here::here())` and the root is fixed by the `.here` file.
@@ -103,7 +90,7 @@ Parameters that vary by dataset (QC thresholds, number of PCs, gene panels, clus
 
 ## Data format
 
-Nothing is versioned except the format description. See [`MET/data/README.md`](MET/data/README.md).
+Nothing is versioned except the format description. 
 
 ```
 MET/data/MET1/filtered_feature_bc_matrix/       Cell Ranger output, parental
